@@ -157,25 +157,6 @@ gotestify.JSONEqual(t, expected, resp, rfc3339)
 Options shape how the arguments are _marshaled_ before comparison. The comparison itself
 works on the resulting JSON text and is not affected by them.
 
-## Compared to jsonassert
-
-[`kinbiko/jsonassert`](https://github.com/kinbiko/jsonassert) solves the same core problem
-and is the more mature, more focused library. The differences that matter when choosing:
-
-- **Placeholders.** jsonassert has `<<PRESENCE>>` - the value exists, ignore it. This
-  package adds _typed_ matchers (`{{uuid}}`, `{{timestamp}}`, your own via
-  `RegisterMatcher`), so a malformed id or a timestamp serialized in the wrong format fails
-  instead of passing as "present".
-- **Cross-field assertions.** Capture variables have no jsonassert equivalent. Asserting
-  that two generated ids in a payload are the same id is the main reason to reach for
-  this package.
-- **Arrays.** jsonassert has `<<UNORDERED>>`; this package compares arrays strictly by
-  index. If your payloads have non-deterministic array order, prefer jsonassert.
-- **Formatting.** jsonassert builds the expected document with `Assertf` and
-  `fmt.Sprintf` verbs. Here the expected document is a plain string and substitution
-  happens through placeholders, which keeps `%` literals and `%d`-shaped content out of
-  the picture.
-
 ## Gotchas
 
 - `{{any}}` does **not** match `null`. Write `null` explicitly when you expect it.
@@ -221,6 +202,24 @@ buf := gotestify.CaptureSlog(t)
 svc.DoWork(ctx)
 assert.Contains(t, buf.String(), "work completed")
 ```
+
+## Alternatives
+
+- [`kinbiko/jsonassert`](https://github.com/kinbiko/jsonassert) - semantic JSON equality with
+  `<<PRESENCE>>` and `<<UNORDERED>>` directives. Prefer it when array order is
+  non-deterministic; this package compares arrays by index.
+- [`swaggest/assertjson`](https://github.com/swaggest/assertjson) - testify-style JSON
+  equality built on gojsondiff, with an `"<ignore-diff>"` placeholder and custom comparers.
+- [`google/go-cmp`](https://github.com/google/go-cmp) - general Go value comparison with
+  readable diffs and fine-grained options. Not JSON-aware; the right tool when you are
+  comparing Go values rather than what they serialize to.
+- [`alecthomas/assert`](https://github.com/alecthomas/assert) - a small, generics-based
+  general assertion library that uses go-cmp for diffs, positioned as a reduced-surface
+  alternative to testify itself.
+
+What this package adds over the JSON-specific ones is typed matchers (`{{uuid}}`,
+`{{timestamp}}`, your own via `RegisterMatcher`) and capture variables for asserting that two
+generated values in a payload agree.
 
 ## Credits
 
