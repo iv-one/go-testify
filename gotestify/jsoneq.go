@@ -3,15 +3,14 @@ package gotestify
 import (
 	"bytes"
 	gojson "encoding/json"
-	gojsonv2 "encoding/json/v2"
-	"errors"
+	"encoding/json/v2"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 	"uuid"
 )
@@ -22,68 +21,56 @@ type tHelper interface {
 	Helper()
 }
 
-// TestingT is the testing interface.
+// TestingT is the subset of *testing.T the assertion helpers need.
 type TestingT interface {
 	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
 }
 
-// JSONEqual compares two JSON documents using given options.
-func JSONEqual(t TestingT, expected, actual any, jsonOpts ...gojsonv2.Options) {
+// JSONEqual fails t unless expected and actual are the same JSON document.
+// Either argument may be a JSON string or any value marshalable with
+// encoding/json/v2 and jsonOpts. The expected side may use {{...}}
+// placeholders: see Compare.
+func JSONEqual(t TestingT, expected, actual any, jsonOpts ...json.Options) {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	assertJSON(t, expected, actual, "FullMatch", func(d Difference) bool {
+		return d == FullMatch
+	}, jsonOpts...)
+}
+
+// IsSubsetJSON is JSONEqual that also accepts extra properties on the actual
+// side.
+func IsSubsetJSON(t TestingT, expected, actual any, jsonOpts ...json.Options) {
+	if h, ok := t.(tHelper); ok {
+		h.Helper()
+	}
+	assertJSON(t, expected, actual, "FullMatch | SubsetMatch", func(d Difference) bool {
+		return d == FullMatch || d == SubsetMatch
+	}, jsonOpts...)
+}
+
+func assertJSON(t TestingT, expected, actual any, want string, accept func(Difference) bool, jsonOpts ...json.Options) {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
 
-	opts := DefaultConsoleOptions()
-	a, err := toJSON(expected, gojsonv2.JoinOptions(jsonOpts...))
+	a, err := toJSON(expected, jsonOpts...)
 	if err != nil {
-		t.Errorf("failed to marshal first argument: %s", err)
+		t.Errorf("failed to marshal expected argument: %s", err)
+		return
 	}
-
-	b, err := toJSON(actual, gojsonv2.JoinOptions(jsonOpts...))
+	b, err := toJSON(actual, jsonOpts...)
 	if err != nil {
-		t.Errorf("failed to marshal second argument: %s", err)
+		t.Errorf("failed to marshal actual argument: %s", err)
+		return
 	}
 
-	diff, res := CompareStr(a, b, opts)
-	if diff != FullMatch {
-		t.Errorf("expected FullMatch, got %s \n%s", diff, res)
+	diff, res := Compare(a, b, DefaultConsoleOptions())
+	if !accept(diff) {
+		t.Errorf("expected %s, got %s \n%s", want, diff, res)
 	}
-}
-
-// IsSubsetJSON compares two JSON documents using given options.
-func IsSubsetJSON(t TestingT, expected, actual any, jsonOpts ...gojsonv2.Options) {
-	if h, ok := t.(tHelper); ok {
-		h.Helper()
-	}
-
-	opts := DefaultConsoleOptions()
-	a, err := toJSON(expected, gojsonv2.JoinOptions(jsonOpts...))
-	if err != nil {
-		t.Errorf("failed to marshal first argument: %s", err)
-	}
-
-	b, err := toJSON(actual, gojsonv2.JoinOptions(jsonOpts...))
-	if err != nil {
-		t.Errorf("failed to marshal second argument: %s", err)
-	}
-
-	diff, res := CompareStr(a, b, opts)
-	if diff != FullMatch && diff != SubsetMatch {
-		t.Errorf("expected FullMatch | SubsetMatch , got %s \n%s", diff, res)
-	}
-}
-
-func toJSON(v any, opts gojsonv2.Options) (string, error) {
-	if reflect.TypeOf(v).Kind() == reflect.String {
-		return v.(string), nil
-	}
-
-	b, err := gojsonv2.Marshal(v, opts)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
 }
 
 // Difference is the difference type.
@@ -127,13 +114,13 @@ func (d Difference) String() string {
 	return "Invalid"
 }
 
-// Tag is the tag type.
+// Tag wraps a span of diff output, e.g. with ANSI color codes.
 type Tag struct {
 	Begin string
 	End   string
 }
 
-// Options is the options type.
+// Options controls how Compare renders a diff. It is unrelated to json.Options.
 type Options struct {
 	Normal                Tag
 	Added                 Tag
@@ -159,8 +146,7 @@ func SkippedArrayElement(n int) string {
 		return "...skipped 1 array element..."
 	}
 
-	ns := strconv.FormatInt(int64(n), 10)
-	return "...skipped " + ns + " array elements..."
+	return "...skipped " + strconv.Itoa(n) + " array elements..."
 }
 
 // SkippedObjectProperty returns the skipped object property string.
@@ -169,8 +155,7 @@ func SkippedObjectProperty(n int) string {
 		return "...skipped 1 object property..."
 	}
 
-	ns := strconv.FormatInt(int64(n), 10)
-	return "...skipped " + ns + " object properties..."
+	return "...skipped " + strconv.Itoa(n) + " object properties..."
 }
 
 // DefaultJSONOptions provides a set of options in JSON format that are fully parseable.
@@ -231,15 +216,13 @@ func (ctx *context) newline(buf *bytes.Buffer, s string) {
 	}
 	buf.WriteString("\n")
 	buf.WriteString(ctx.opts.Prefix)
-	for i := 0; i < ctx.level; i++ {
-		buf.WriteString(ctx.opts.Indent)
-	}
+	buf.WriteString(strings.Repeat(ctx.opts.Indent, ctx.level))
 	if ctx.lastTag != nil {
 		buf.WriteString(ctx.lastTag.Begin)
 	}
 }
 
-func (ctx *context) key(buf *bytes.Buffer, k string) {
+func writeKey(buf *bytes.Buffer, k string) {
 	buf.WriteString(strconv.Quote(k))
 	buf.WriteString(": ")
 }
@@ -282,16 +265,12 @@ func (ctx *context) writeValue(buf *bytes.Buffer, v any, full bool) {
 				ctx.newline(buf, "{")
 			}
 
-			keys := make([]string, 0, len(vv))
-			for key := range vv {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
+			keys := slices.Sorted(maps.Keys(vv))
 
 			i := 0
 			for _, k := range keys {
 				v := vv[k]
-				ctx.key(buf, k)
+				writeKey(buf, k)
 				ctx.writeValue(buf, v, true)
 				if i != len(vv)-1 {
 					ctx.newline(buf, ",")
@@ -470,9 +449,7 @@ func (it *dualMapIterator) next() (a any, aOK bool, b any, bOK bool, i int) {
 }
 
 func (it *dualMapIterator) key(buf *bytes.Buffer) {
-	key := it.keys[it.current]
-	buf.WriteString(strconv.Quote(key))
-	buf.WriteString(": ")
+	writeKey(buf, it.keys[it.current])
 }
 
 func (ctx context) vkey(k string) string {
@@ -495,22 +472,17 @@ func (ctx context) makeDualMapIterator(ax, bx map[string]any) dualIterator {
 		b[ctx.vkey(k)] = v
 	}
 
-	keysMap := make(map[string]struct{})
+	keysMap := make(map[string]struct{}, len(a)+len(b))
 	for k := range a {
 		keysMap[k] = struct{}{}
 	}
 	for k := range b {
 		keysMap[k] = struct{}{}
 	}
-	keys := make([]string, 0, len(keysMap))
-	for k := range keysMap {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
 	return &dualMapIterator{
 		a:       a,
 		b:       b,
-		keys:    keys,
+		keys:    slices.Sorted(maps.Keys(keysMap)),
 		current: -1,
 	}
 }
@@ -771,69 +743,47 @@ func (ctx *context) printDiff(ai, bi any) string {
 // human-readable difference between provided JSON documents. It is important
 // to understand that returned format is not a valid JSON and is not meant
 // to be machine readable.
+//
+// Strings on the a side may be placeholders: {{any}}, {{timestamp}} and
+// {{uuid}} match a value by shape; any other {{name}} captures the b value and
+// must match it wherever the name recurs; "{{x}}:{{y}}" and similar are
+// rendered with text/template against the captured values.
+//
+// Both documents are decoded with encoding/json (v1) so that numbers keep
+// their literal text; json.Options passed to JSONEqual and friends affect
+// only how the arguments are marshaled, not this comparison.
 func Compare(a, b []byte, opts *Options) (Difference, string) {
 	return CompareStreams(bytes.NewReader(a), bytes.NewReader(b), opts)
 }
 
-// CompareStr compares two JSON documents using given options.
+// CompareStr is Compare for string documents.
 func CompareStr(a, b string, opts *Options) (Difference, string) {
-	return Compare([]byte(a), []byte(b), opts)
+	return CompareStreams(strings.NewReader(a), strings.NewReader(b), opts)
 }
 
 // CompareStreams compares two JSON documents streamed by the specified readers.
 // See the documentation for `Compare` for a description of the input options and return values.
 func CompareStreams(a, b io.Reader, opts *Options) (Difference, string) {
-	var av, bv any
-	da := gojson.NewDecoder(a)
-	da.UseNumber()
-	db := gojson.NewDecoder(b)
-	db.UseNumber()
-	errA := da.Decode(&av)
-	errB := db.Decode(&bv)
-	if errA != nil && errB != nil {
-		return BothArgsAreInvalidJSON, fmt.Sprintf("invalid jsons:\na: %v\nb: %v", errA, errB)
+	av, bv, diff, err := decodePair(a, b)
+	if err != nil {
+		return diff, err.Error()
 	}
-	if errA != nil {
-		return FirstArgIsInvalidJSON, fmt.Sprintf("invalid json:\na: %v", errA)
-	}
-	if errB != nil {
-		return SecondArgIsInvalidJSON, fmt.Sprintf("invalid json:\nb: %v", errB)
-	}
-
-	var buf bytes.Buffer
 
 	ctx := context{opts: opts}
 	ctx.collectVars(av, bv)
-	buf.WriteString(ctx.printDiff(av, bv))
-	return ctx.diff, buf.String()
+	return ctx.diff, ctx.printDiff(av, bv)
 }
 
 // CollectVars collects the variables from two JSON documents using given options.
 func CollectVars(a, b string, opts *Options) (map[string]any, error) {
-	return CollectVarsStream(
-		bytes.NewReader([]byte(a)),
-		bytes.NewReader([]byte(b)),
-		opts,
-	)
+	return CollectVarsStream(strings.NewReader(a), strings.NewReader(b), opts)
 }
 
 // CollectVarsStream collects the variables from two JSON documents streamed by the specified readers using given options.
 func CollectVarsStream(a, b io.Reader, opts *Options) (map[string]any, error) {
-	var av, bv any
-	da := gojson.NewDecoder(a)
-	da.UseNumber()
-	db := gojson.NewDecoder(b)
-	db.UseNumber()
-	errA := da.Decode(&av)
-	errB := db.Decode(&bv)
-	if errA != nil && errB != nil {
-		return nil, errors.New("both arguments are invalid json")
-	}
-	if errA != nil {
-		return nil, errors.New("first argument is invalid json")
-	}
-	if errB != nil {
-		return nil, errors.New("second argument is invalid json")
+	av, bv, _, err := decodePair(a, b)
+	if err != nil {
+		return nil, err
 	}
 
 	ctx := context{opts: opts}
@@ -841,39 +791,52 @@ func CollectVarsStream(a, b io.Reader, opts *Options) (map[string]any, error) {
 	return ctx.vars, nil
 }
 
+// decodePair decodes two JSON documents into generic values, keeping numbers
+// as their literal text. On failure it also reports which side was invalid.
+func decodePair(a, b io.Reader) (av, bv any, diff Difference, err error) {
+	da := gojson.NewDecoder(a)
+	da.UseNumber()
+	db := gojson.NewDecoder(b)
+	db.UseNumber()
+	errA := da.Decode(&av)
+	errB := db.Decode(&bv)
+	switch {
+	case errA != nil && errB != nil:
+		return nil, nil, BothArgsAreInvalidJSON, fmt.Errorf("invalid jsons:\na: %w\nb: %w", errA, errB)
+	case errA != nil:
+		return nil, nil, FirstArgIsInvalidJSON, fmt.Errorf("invalid json:\na: %w", errA)
+	case errB != nil:
+		return nil, nil, SecondArgIsInvalidJSON, fmt.Errorf("invalid json:\nb: %w", errB)
+	}
+	return av, bv, FullMatch, nil
+}
+
 func asStr(v any) string {
-	if v == nil {
-		return ""
-	}
-
-	if reflect.TypeOf(v).Kind() == reflect.String {
-		if str, ok := v.(string); ok {
-			return str
-		}
-	}
-	return ""
+	s, _ := v.(string)
+	return s
 }
 
-// Variables are defined in the form of {{var_name}} in the JSON, where var_name is the name of the variable.
-// isVar should check the correct pattern of the variable.
-// i.e. {{a}}:{{b}} is not a variable, but {{a}} is a variable.
-func isVar(v any) bool {
+// varName returns the name of a variable placeholder. A variable is a string
+// of the form {{name}} and nothing else: "{{a}}:{{b}}" is an expression, not
+// a variable.
+func varName(v any) (string, bool) {
 	s := asStr(v)
-	if s == "" {
-		return false
+	if len(s) < 4 || !strings.HasPrefix(s, "{{") || !strings.HasSuffix(s, "}}") {
+		return "", false
 	}
-
-	if len(s) < 4 {
-		return false
+	if strings.Index(s, "}}") != len(s)-2 || strings.LastIndex(s, "{{") != 0 {
+		return "", false
 	}
-
-	return strings.HasSuffix(s, "}}") &&
-		strings.HasPrefix(s, "{{") &&
-		strings.Index(s, "}}") == len(s)-2 &&
-		strings.LastIndex(s, "{{") == 0
+	return s[2 : len(s)-2], true
 }
 
-// Fn is the function type.
+func isVar(v any) bool {
+	_, ok := varName(v)
+	return ok
+}
+
+// Fn is a matcher: it reports whether an actual value satisfies a placeholder
+// such as {{uuid}}.
 type Fn func(x any) bool
 
 var functions = map[string]Fn{
@@ -882,17 +845,13 @@ var functions = map[string]Fn{
 	"uuid":      isUUID,
 }
 
+// isFunc reports whether v is a placeholder naming a registered matcher.
 func isFunc(v any) bool {
-	if !isVar(v) {
+	name, ok := varName(v)
+	if !ok {
 		return false
 	}
-
-	name, err := extractVarName(v)
-	if err != nil {
-		return false
-	}
-
-	_, ok := functions[name]
+	_, ok = functions[name]
 	return ok
 }
 
@@ -901,71 +860,46 @@ func isExpression(v any) bool {
 	return strings.Contains(s, "{{") && strings.Contains(s, "}}")
 }
 
-func extractVarName(x any) (string, error) {
-	if !isVar(x) {
-		return "", fmt.Errorf("not a variable: %v", x)
-	}
-	return x.(string)[2 : len(x.(string))-2], nil
-}
-
+// evalExpression renders an expression such as "{{a}}:{{b}}" against the
+// variables collected so far.
 func (ctx *context) evalExpression(v any) (string, error) {
 	if !isExpression(v) {
 		return "", fmt.Errorf("not an expression: %v", v)
 	}
 
-	text := asStr(v)
-	text = strings.ReplaceAll(text, "{{", "{{.")
-	tmpl, err := template.New("template.tpl").Parse(text)
-	if err != nil {
-		return "", err
-	}
-	var tpl bytes.Buffer
-	err = tmpl.Execute(&tpl, ctx.vars)
-	if err != nil {
-		return "", err
-	}
-
-	return tpl.String(), nil
+	return CompileTemplate(strings.ReplaceAll(asStr(v), "{{", "{{."), ctx.vars)
 }
 
-// evalFunction evaluates the function with the given arguments.
-// It returns true if the function is evaluated successfully, otherwise false.
-// TODO: use error instead of bool
+// evalFunction applies the matcher named by placeholder a to b.
 func evalFunction(a, b any) bool {
-	funcName, err := extractVarName(a)
-	if err != nil {
+	name, ok := varName(a)
+	if !ok {
 		return false
 	}
-
-	if fn, ok := functions[funcName]; ok {
-		return fn(b)
-	}
-
-	return false
+	fn, ok := functions[name]
+	return ok && fn(b)
 }
 
 func anyFunc(_ any) bool {
 	return true
 }
 
-func isTimestamp(t any) bool {
-	if reflect.TypeOf(t).Kind() == reflect.String {
-		if str, ok := t.(string); ok {
-			_, err := time.ParseInLocation(time.RFC3339, str, time.UTC)
-			return err == nil
-		}
+func isTimestamp(v any) bool {
+	s, ok := v.(string)
+	if !ok {
+		return false
 	}
-	return false
+	_, err := time.ParseInLocation(time.RFC3339, s, time.UTC)
+	return err == nil
 }
 
-func isUUID(val any) bool {
-	if reflect.TypeOf(val).Kind() == reflect.String {
-		if str, ok := val.(string); ok {
-			_, err := uuid.Parse(str)
-			return err == nil
-		}
+func isUUID(v any) bool {
+	s, ok := v.(string)
+	if !ok {
+		return false
 	}
-	return false
+	_, err := uuid.Parse(s)
+	return err == nil
 }
 
 func (ctx *context) putVar(k string, v any) {
@@ -979,12 +913,11 @@ func (ctx *context) putVar(k string, v any) {
 	}
 }
 
+// parseAndCollectVar binds a to b when a is a capture variable (a placeholder
+// that is not a matcher).
 func (ctx *context) parseAndCollectVar(a, b any) {
-	if isVar(a) && !isFunc(a) {
-		name, err := extractVarName(a)
-		if err == nil {
-			ctx.putVar(name, b)
-		}
+	if name, ok := varName(a); ok && !isFunc(a) {
+		ctx.putVar(name, b)
 	}
 }
 
@@ -1015,17 +948,17 @@ func (ctx *context) collectVars(a, b any) {
 		return
 	case reflect.Slice:
 		sa, sb := a.([]any), b.([]any)
-		ctx.collectSliceVars(makeDualSliceIterator(sa, sb))
+		ctx.collectPairVars(makeDualSliceIterator(sa, sb))
 		return
 	case reflect.Map:
 		ma, mb := a.(map[string]any), b.(map[string]any)
-		ctx.collectSliceVars(ctx.makeDualMapIterator(ma, mb))
+		ctx.collectPairVars(ctx.makeDualMapIterator(ma, mb))
 	}
 }
 
-func (ctx *context) collectSliceVars(itx dualIterator) {
-	it := itx.clone()
-
+// collectPairVars collects variables from every aligned pair the iterator
+// yields, for arrays and objects alike.
+func (ctx *context) collectPairVars(it dualIterator) {
 	for {
 		a, aok, b, bok, i := it.next()
 		if i == -1 {

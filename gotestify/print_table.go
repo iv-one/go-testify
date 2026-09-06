@@ -6,33 +6,35 @@ import (
 	"reflect"
 	"strings"
 	"text/tabwriter"
+	"text/template"
 )
 
 // PrintTable renders data as a text table with the given columns. Columns are
 // JSON field names: see createTable.
 func PrintTable(data any, columns []string, opts ...json.Options) (string, error) {
-	const padding = 1
-	var builder strings.Builder
-	var res strings.Builder
-
+	var line strings.Builder
 	for _, col := range columns {
-		builder.WriteString("{{." + col + "}}\t")
+		line.WriteString("{{." + col + "}}\t")
 	}
-	tmpl := builder.String()
-	w := tabwriter.NewWriter(&res, 0, 2, padding, ' ', tabwriter.DiscardEmptyColumns|tabwriter.Debug)
+	tmpl, err := template.New("row").Parse(line.String())
+	if err != nil {
+		return "", err
+	}
 
 	table, err := createTable(data, opts...)
 	if err != nil {
 		return "", err
 	}
 
-	for _, d := range table {
-		line, err := CompileTemplate(tmpl, d)
-		if err != nil {
+	const padding = 1
+	var res strings.Builder
+	w := tabwriter.NewWriter(&res, 0, 2, padding, ' ', tabwriter.DiscardEmptyColumns|tabwriter.Debug)
+
+	for _, row := range table {
+		if err := tmpl.Execute(w, row); err != nil {
 			return "", err
 		}
-
-		_, _ = fmt.Fprintln(w, line)
+		_, _ = fmt.Fprintln(w)
 	}
 
 	if err := w.Flush(); err != nil {
@@ -44,34 +46,13 @@ func PrintTable(data any, columns []string, opts ...json.Options) (string, error
 
 // createTable round-trips data through JSON into a JSONArray, so that every row
 // is a uniform map keyed by JSON field name and any custom codecs in opts apply.
-// A value that is not already a slice is wrapped in a single-element one.
+// A value that is neither a slice nor an encoded document is wrapped in a
+// single-element slice; nil yields an empty table.
 func createTable(data any, opts ...json.Options) (JSONArray, error) {
-	// data -> JSON -> map
-	var jsonStr string
-	switch {
-	case data == nil:
-		jsonStr = "[]"
-	case isString(data):
-		jsonStr = data.(string)
-	case isSlice(data):
-		jsonStr = Nice(data, opts...)
-	default:
-		jsonStr = Nice([]any{data}, opts...)
+	_, isDocument := data.(string)
+	if data != nil && !isDocument && reflect.ValueOf(data).Kind() != reflect.Slice {
+		data = []any{data}
 	}
 
-	return ParseJSON[JSONArray]([]byte(jsonStr))
-}
-
-// isString checks if the provided data is a string using type assertion
-func isString(data any) bool {
-	_, ok := data.(string)
-	return ok
-}
-
-// isSlice checks if the provided data is a slice
-func isSlice(data any) bool {
-	// Use reflect.TypeOf to get the type of the data
-	t := reflect.TypeOf(data)
-	// Check if the kind of the type is reflect.Slice
-	return t.Kind() == reflect.Slice
+	return normalizeJSON[JSONArray](data, opts...)
 }

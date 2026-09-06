@@ -8,5 +8,4 @@
 //
 // PrintTable and TableEqual render a slice of values as a text table keyed by
 // JSON field name and diff it cell by cell.
-
 package gotestify

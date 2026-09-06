@@ -1,6 +1,6 @@
 # go-testify
 
-Assertion helpers for Go tests that deal with JSON — and, to a lesser extent, tables.
+Assertion helpers for Go tests that deal with JSON - and, to a lesser extent, tables.
 
 ```sh
 go get github.com/iv-one/go-testify
@@ -17,7 +17,7 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*User, error)
 ```
 
 Asserting field by field is verbose and, worse, it silently ignores the fields you forgot
-to list — a new field with a wrong value slips through:
+to list - a new field with a wrong value slips through:
 
 ```go
 u, err := svc.GetUser(ctx, id)
@@ -28,7 +28,7 @@ assert.NotZero(t, u.CreatedAt)  // and so on, forever
 ```
 
 `assert.Equal` against a full literal struct is exhaustive, but then you have to
-construct — and keep constructing — the server-generated values: ids, timestamps,
+construct - and keep constructing - the server-generated values: ids, timestamps,
 tenant references. Those change on every run.
 
 ## The fix
@@ -52,7 +52,7 @@ func TestGetUser(t *testing.T) {
 }
 ```
 
-The actual value can be a struct, a pointer, a map, or a JSON string — anything that is
+The actual value can be a struct, a pointer, a map, or a JSON string - anything that is
 not a string is marshaled with `encoding/json/v2` first, so the assertion is written
 against the same JSON your API actually serves.
 
@@ -64,19 +64,20 @@ list of unrelated assertion errors.
 
 Placeholders go on the **expected** side.
 
-| Placeholder     | Matches                                                   |
-| --------------- | --------------------------------------------------------- |
-| `{{any}}`       | any non-null value                                         |
-| `{{timestamp}}` | a string parseable as RFC 3339                             |
-| `{{uuid}}`      | a string parseable as a UUID                               |
-| `{{name}}`      | anything — and binds the actual value to the variable `name` |
+| Placeholder     | Matches                                                      |
+| --------------- | ------------------------------------------------------------ |
+| `{{any}}`       | any non-null value                                           |
+| `{{timestamp}}` | a string parseable as RFC 3339                               |
+| `{{uuid}}`      | a string parseable as a UUID                                 |
+| `{{name}}`      | anything - and binds the actual value to the variable `name` |
 
-Add your own by registering an `Fn func(any) bool` in the `functions` map.
+The matcher set is fixed for now; a placeholder that is not one of the three above is a
+capture variable, described next.
 
 ## Capturing and reusing values
 
 A placeholder that is not a known matcher is a **capture variable**. It binds to whatever
-the actual side holds, and every later use of that name must match the same value — which
+the actual side holds, and every later use of that name must match the same value - which
 is how you assert that two ids in a response refer to each other, without knowing either:
 
 ```go
@@ -102,7 +103,7 @@ id := vars["uid"].(string)
 
 ## Partial matching
 
-`IsSubsetJSON` accepts extra fields on the actual side — useful when you only care about
+`IsSubsetJSON` accepts extra fields on the actual side - useful when you only care about
 part of a large payload:
 
 ```go
@@ -135,8 +136,8 @@ The same applies to `Nice`, `MarshalIndent`, `ParseJSON`, `CompileTemplateJSON`,
 [`kinbiko/jsonassert`](https://github.com/kinbiko/jsonassert) solves the same core problem
 and is the more mature, more focused library. The differences that matter when choosing:
 
-- **Placeholders.** jsonassert has `<<PRESENCE>>` — the value exists, ignore it. This
-  package adds *typed* matchers (`{{uuid}}`, `{{timestamp}}`), so a malformed id or a
+- **Placeholders.** jsonassert has `<<PRESENCE>>` - the value exists, ignore it. This
+  package adds _typed_ matchers (`{{uuid}}`, `{{timestamp}}`), so a malformed id or a
   timestamp serialized in the wrong format fails instead of passing as "present".
 - **Cross-field assertions.** Capture variables have no jsonassert equivalent. Asserting
   that two generated ids in a payload are the same id is the main reason to reach for
@@ -156,15 +157,15 @@ and is the more mature, more focused library. The differences that matter when c
 - Numbers are compared by their literal representation, so `1` does not equal `1.0`. Set
   `Options.CompareNumbers` to change that.
 - Arrays are compared by index; there is no unordered mode.
-- A variable used as an object *key* must also be bound from a value position elsewhere
-  in the document — a key-only variable resolves to nothing.
+- A variable used as an object _key_ must also be bound from a value position elsewhere
+  in the document - a key-only variable resolves to nothing.
 - Rendered diffs are meant to be read, not parsed. They are not valid JSON.
 - `Options.SkipMatches` collapses the matching parts of a diff, which helps on large
   payloads.
 
 ## Tables
 
-`TableEqual` renders a slice as a text table and diffs it cell by cell — handy for
+`TableEqual` renders a slice as a text table and diffs it cell by cell - handy for
 asserting on report or listing output. Columns are **JSON** field names:
 
 ```go
@@ -199,4 +200,4 @@ the placeholder and capture-variable machinery described above.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT - see [LICENSE](LICENSE).

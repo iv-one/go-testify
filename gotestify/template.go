@@ -1,8 +1,8 @@
 package gotestify
 
 import (
-	"bytes"
 	"encoding/json/v2"
+	"strings"
 	"text/template"
 )
 
@@ -13,7 +13,7 @@ func CompileTemplate(tmpl string, data any) (string, error) {
 		return "", err
 	}
 
-	var buf bytes.Buffer
+	var buf strings.Builder
 	if err := t.Execute(&buf, data); err != nil {
 		return "", err
 	}
@@ -25,12 +25,7 @@ func CompileTemplate(tmpl string, data any) (string, error) {
 // through JSON, so template fields are the JSON field names rather than the Go
 // ones and any custom codecs in opts apply.
 func CompileTemplateJSON(tmpl string, data any, opts ...json.Options) (string, error) {
-	b, err := json.Marshal(data, json.JoinOptions(opts...))
-	if err != nil {
-		return "", err
-	}
-
-	normalized, err := ParseJSON[any](b)
+	normalized, err := normalizeJSON[any](data, opts...)
 	if err != nil {
 		return "", err
 	}
