@@ -53,8 +53,10 @@ A fork of [nsf/jsondiff](https://github.com/nsf/jsondiff) extended with **templa
     (`putVar` never overwrites).
   - **Expressions** — anything containing `{{`/`}}` that is not a bare var, e.g. `"{{x}}:{{y}}"`,
     is rewritten to `{{.x}}:{{.y}}` and rendered with `text/template` against the captured vars.
-  - Map **keys** are substituted too, via `vkey` in `makeDualMapIterator` — so a captured id can be
-    used as an object key on the expected side.
+  - Map **keys** are substituted via `vkey` in `makeDualMapIterator`, so a captured id can be used
+    as an object key. Note the ordering constraint: `vkey` resolves against `ctx.vars`, so a
+    variable used *only* as a key never binds and renders as `<no value>`. It must also appear in
+    a value position somewhere in the document.
 - Traversal is uniform over arrays and objects through the `dualIterator` interface
   (`dualSliceIterator`, `dualMapIterator`), which yields aligned `(a, b, present-flags)` tuples.
   Any structural change should go through that interface, not per-kind branches.
