@@ -6,11 +6,12 @@ import (
 	"strings"
 )
 
-// TableEqual renders data as a table (see PrintTable) and compares it line by
-// line and cell by cell with expected. Leading and trailing whitespace on each
+// TableEqual renders data as a table (see PrintTable) and reports whether it
+// matches expected line by line and cell by cell, failing t with a colorized
+// diff when it does not. Leading and trailing whitespace on each
 // expected line is ignored, as are blank lines, so the literal can be indented
 // to match the surrounding code.
-func TableEqual(t TestingT, expected string, data any, columns []string, jsonOpts ...json.Options) {
+func TableEqual(t TestingT, expected string, data any, columns []string, jsonOpts ...json.Options) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
@@ -18,7 +19,7 @@ func TableEqual(t TestingT, expected string, data any, columns []string, jsonOpt
 	table, err := PrintTable(data, columns, jsonOpts...)
 	if err != nil {
 		t.Errorf("TableEqual failed to render table: %s", err)
-		return
+		return false
 	}
 
 	var expectedLines []string
@@ -29,7 +30,7 @@ func TableEqual(t TestingT, expected string, data any, columns []string, jsonOpt
 	}
 	tableLines := strings.Split(strings.TrimSpace(table), "\n")
 
-	opts := DefaultConsoleOptions()
+	opts := ConsoleDiffOptions()
 	var buf bytes.Buffer
 	matched := diffLists(expectedLines, tableLines, "\n", &buf, opts, func(expected, actual string) bool {
 		return matchLine(expected, actual, &buf, opts)
@@ -38,11 +39,12 @@ func TableEqual(t TestingT, expected string, data any, columns []string, jsonOpt
 	if !matched {
 		t.Errorf("TableEqual failed:\n%s", buf.String())
 	}
+	return matched
 }
 
 // matchLine compares one table line cell by cell, marking differing cells as
 // changed.
-func matchLine(expected, actual string, buf *bytes.Buffer, opts *Options) bool {
+func matchLine(expected, actual string, buf *bytes.Buffer, opts *DiffOptions) bool {
 	a := strings.Split(strings.TrimSuffix(expected, "|"), "|")
 	b := strings.Split(strings.TrimSuffix(actual, "|"), "|")
 
@@ -59,7 +61,7 @@ func matchLine(expected, actual string, buf *bytes.Buffer, opts *Options) bool {
 // expected with the Added tag, entries only in actual with the Removed tag,
 // and delegating same-position mismatches to changed. Each entry is followed
 // by sep. It reports whether every entry matched.
-func diffLists(expected, actual []string, sep string, buf *bytes.Buffer, opts *Options, changed func(expected, actual string) bool) bool {
+func diffLists(expected, actual []string, sep string, buf *bytes.Buffer, opts *DiffOptions, changed func(expected, actual string) bool) bool {
 	matched := true
 	for i := range max(len(expected), len(actual)) {
 		switch {

@@ -8,17 +8,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestCompare(t *testing.T) {
-	opts := DefaultJSONOptions()
+	opts := JSONDiffOptions()
 	diff, _ := Compare([]byte(`{"a":1}`), []byte(`{"a":1}`), opts)
 	assert.Equal(t, FullMatch, diff)
 }
 
 func TestCompareAny(t *testing.T) {
-	opts := DefaultJSONOptions()
+	opts := JSONDiffOptions()
 	a := `{"a":"{{any}}"}`
 	b := `{"a":1}`
 	diff, _ := CompareStr(a, b, opts)
@@ -42,7 +41,7 @@ func TestEqual(t *testing.T) {
 }
 
 func TestCollectVars(t *testing.T) {
-	opts := DefaultJSONOptions()
+	opts := JSONDiffOptions()
 	vars, err := CollectVars(`{"a":"{{x}}"}`, `{"a":"1"}`, opts)
 	require.NoError(t, err)
 	assert.Equal(t, map[string]any{
@@ -269,34 +268,35 @@ func TestSubsetMatch(t *testing.T) {
 		}
 	`
 
-	IsSubsetJSON(t, a, b)
+	JSONSubset(t, a, b)
 }
 
+// epoch stands in for a type such as a protobuf Timestamp: its default
+// encoding (a number) is not how the API serves it, so a codec is needed.
+type epoch int64
+
 // JSONEqual marshals non-string arguments with the caller's json.Options, so
-// custom codecs apply to the value under test.
+// a service's custom codecs apply to the value under test.
 func TestJSONEqualAppliesJSONOptions(t *testing.T) {
 	type doc struct {
-		ID string                 `json:"id"`
-		At *timestamppb.Timestamp `json:"at"`
+		ID string `json:"id"`
+		At epoch  `json:"at"`
 	}
 
 	rfc3339 := json.WithMarshalers(json.MarshalToFunc(
-		func(enc *jsontext.Encoder, ts *timestamppb.Timestamp) error {
-			return enc.WriteToken(jsontext.String(ts.AsTime().UTC().Format(time.RFC3339)))
+		func(enc *jsontext.Encoder, e epoch) error {
+			return enc.WriteToken(jsontext.String(time.Unix(int64(e), 0).UTC().Format(time.RFC3339)))
 		}))
 
 	v := &doc{
 		ID: "cjd0keldrb6jdafhr860",
-		At: timestamppb.New(time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC)),
+		At: epoch(time.Date(2024, 5, 6, 7, 8, 9, 0, time.UTC).Unix()),
 	}
+	expected := `{"id":"cjd0keldrb6jdafhr860","at":"2024-05-06T07:08:09Z"}`
 
-	JSONEqual(t, `{"id":"cjd0keldrb6jdafhr860","at":"2024-05-06T07:08:09Z"}`, v, rfc3339)
+	JSONEqual(t, expected, v, rfc3339)
 
-	// Without the codec the timestamp marshals structurally and no longer matches.
-	diff, _ := CompareStr(
-		`{"id":"cjd0keldrb6jdafhr860","at":"2024-05-06T07:08:09Z"}`,
-		Nice(v),
-		DefaultJSONOptions(),
-	)
+	// Without the codec the timestamp marshals as a number and no longer matches.
+	diff, _ := CompareStr(expected, PrettyJSON(v), JSONDiffOptions())
 	assert.Equal(t, NoMatch, diff)
 }

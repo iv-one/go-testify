@@ -1,12 +1,22 @@
 # go-testify
 
-Assertion helpers for Go tests that deal with JSON - and, to a lesser extent, tables.
+An extension of [`stretchr/testify`](https://github.com/stretchr/testify) for asserting on
+JSON documents - and, to a lesser extent, tables.
 
 ```sh
 go get github.com/iv-one/go-testify
 ```
 
-Requires Go 1.27 (uses the stdlib `encoding/json/v2` and `uuid` packages).
+```go
+import "github.com/iv-one/go-testify" // package gotestify
+```
+
+Requires Go 1.27 (uses the stdlib `encoding/json/v2` and `uuid` packages). The only
+dependency is testify itself, and only for the test suite.
+
+The helpers accept the same `TestingT` that testify's `assert` package does, take arguments in
+the same `(t, expected, actual)` order, and return a `bool` the same way, so they drop in next
+to `assert` and `require` without ceremony.
 
 ## The problem
 
@@ -60,25 +70,40 @@ The comparison is exhaustive: add a field to `User` and this test fails until yo
 acknowledge it. On failure you get one colorized diff of the whole document rather than a
 list of unrelated assertion errors.
 
+Runnable examples for every helper are in
+[`example_test.go`](example_test.go) and on
+[pkg.go.dev](https://pkg.go.dev/github.com/iv-one/go-testify).
+
 ## Matchers
 
 Placeholders go on the **expected** side.
 
 | Placeholder     | Matches                                                      |
 | --------------- | ------------------------------------------------------------ |
-| `{{any}}`       | any non-null value                                           |
-| `{{timestamp}}` | a string parseable as RFC 3339                               |
-| `{{uuid}}`      | a string parseable as a UUID                                 |
+| `{{any}}`       | any non-null value                                            |
+| `{{timestamp}}` | a string parseable as RFC 3339                                |
+| `{{uuid}}`      | a string parseable as a UUID                                  |
 | `{{name}}`      | anything - and binds the actual value to the variable `name` |
 
-The matcher set is fixed for now; a placeholder that is not one of the three above is a
-capture variable, described next.
+Add your own with `RegisterMatcher`, typically from an `init` or `TestMain`:
+
+```go
+gotestify.RegisterMatcher("email", func(v any) bool {
+	s, ok := v.(string)
+	return ok && strings.Contains(s, "@")
+})
+
+gotestify.JSONEqual(t, `{"email": "{{email}}"}`, resp)
+```
+
+Numbers reach a matcher as `gotestify.Number`, the literal text of the JSON number.
 
 ## Capturing and reusing values
 
-A placeholder that is not a known matcher is a **capture variable**. It binds to whatever
-the actual side holds, and every later use of that name must match the same value - which
-is how you assert that two ids in a response refer to each other, without knowing either:
+A placeholder that is not a registered matcher is a **capture variable**. It binds to
+whatever the actual side holds, and every later use of that name must match the same
+value - which is how you assert that two ids in a response refer to each other, without
+knowing either:
 
 ```go
 gotestify.JSONEqual(t, `{
@@ -96,40 +121,41 @@ To pull a generated id out of one response and feed it into the next request, us
 `CollectVars`:
 
 ```go
-vars, err := gotestify.CollectVars(expected, actual, gotestify.DefaultJSONOptions())
+vars, err := gotestify.CollectVars(expected, actual, gotestify.JSONDiffOptions())
 require.NoError(t, err)
 id := vars["uid"].(string)
 ```
 
 ## Partial matching
 
-`IsSubsetJSON` accepts extra fields on the actual side - useful when you only care about
+`JSONSubset` accepts extra fields on the actual side - useful when you only care about
 part of a large payload:
 
 ```go
-gotestify.IsSubsetJSON(t, `{"id": "{{uuid}}", "name": "Alice"}`, resp)
+gotestify.JSONSubset(t, `{"id": "{{uuid}}", "name": "Alice"}`, resp)
 ```
 
-For the raw result, `CompareStr` returns a `Difference` (`FullMatch`, `SubsetMatch`,
-`SupersetMatch`, `NoMatch`) plus the rendered diff, which lets you write your own
+For the raw result, `Compare` returns a `Difference` (`FullMatch`, `SubsetMatch`,
+`SupersetMatch`, `NoMatch`, ...) plus the rendered diff, which lets you write your own
 assertion or inspect the comparison without failing a test.
 
 ## Custom encoding
 
-Every helper that touches JSON takes trailing `...json.Options` (v2), so the codecs your
-service uses apply to the value under test:
+`JSONEqual`, `JSONSubset`, `PrintTable` and `TableEqual` take trailing `...json.Options`
+(v2), so the codecs your service uses apply to the value under test. Say your API renders a
+`Timestamp` type as RFC 3339 rather than its default encoding:
 
 ```go
 rfc3339 := json.WithMarshalers(json.MarshalToFunc(
-	func(enc *jsontext.Encoder, ts *timestamppb.Timestamp) error {
-		return enc.WriteToken(jsontext.String(ts.AsTime().UTC().Format(time.RFC3339)))
+	func(enc *jsontext.Encoder, ts Timestamp) error {
+		return enc.WriteToken(jsontext.String(ts.Time().UTC().Format(time.RFC3339)))
 	}))
 
 gotestify.JSONEqual(t, expected, resp, rfc3339)
 ```
 
-The same applies to `Nice`, `MarshalIndent`, `ParseJSON`, `CompileTemplateJSON`,
-`IsSubsetJSON`, `PrintTable` and `TableEqual`.
+Options shape how the arguments are _marshaled_ before comparison. The comparison itself
+works on the resulting JSON text and is not affected by them.
 
 ## Compared to jsonassert
 
@@ -137,8 +163,9 @@ The same applies to `Nice`, `MarshalIndent`, `ParseJSON`, `CompileTemplateJSON`,
 and is the more mature, more focused library. The differences that matter when choosing:
 
 - **Placeholders.** jsonassert has `<<PRESENCE>>` - the value exists, ignore it. This
-  package adds _typed_ matchers (`{{uuid}}`, `{{timestamp}}`), so a malformed id or a
-  timestamp serialized in the wrong format fails instead of passing as "present".
+  package adds _typed_ matchers (`{{uuid}}`, `{{timestamp}}`, your own via
+  `RegisterMatcher`), so a malformed id or a timestamp serialized in the wrong format fails
+  instead of passing as "present".
 - **Cross-field assertions.** Capture variables have no jsonassert equivalent. Asserting
   that two generated ids in a payload are the same id is the main reason to reach for
   this package.
@@ -154,13 +181,15 @@ and is the more mature, more focused library. The differences that matter when c
 - `{{any}}` does **not** match `null`. Write `null` explicitly when you expect it.
 - Raw `[]byte` is marshaled as a base64 string, not treated as a JSON document. Convert a
   response body with `string(b)` first.
-- Numbers are compared by their literal representation, so `1` does not equal `1.0`. Set
-  `Options.CompareNumbers` to change that.
+- Numbers are compared by their literal text, so `1` does not equal `1.0` and large
+  integers keep full precision. Set `DiffOptions.CompareNumbers` to relax that.
 - Arrays are compared by index; there is no unordered mode.
 - A variable used as an object _key_ must also be bound from a value position elsewhere
   in the document - a key-only variable resolves to nothing.
+- A malformed `{{...}}` expression yields `ExpressionError` with the template error in the
+  diff; it never panics.
 - Rendered diffs are meant to be read, not parsed. They are not valid JSON.
-- `Options.SkipMatches` collapses the matching parts of a diff, which helps on large
+- `DiffOptions.SkipMatches` collapses the matching parts of a diff, which helps on large
   payloads.
 
 ## Tables

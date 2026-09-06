@@ -44,15 +44,15 @@ func PrintTable(data any, columns []string, opts ...json.Options) (string, error
 	return res.String(), nil
 }
 
-// createTable round-trips data through JSON into a JSONArray, so that every row
+// createTable round-trips data through JSON into a jsonArray, so that every row
 // is a uniform map keyed by JSON field name and any custom codecs in opts apply.
 // A value that is neither a slice nor an encoded document is wrapped in a
 // single-element slice; nil yields an empty table.
-func createTable(data any, opts ...json.Options) (JSONArray, error) {
+func createTable(data any, opts ...json.Options) (jsonArray, error) {
 	_, isDocument := data.(string)
 	if data != nil && !isDocument && reflect.ValueOf(data).Kind() != reflect.Slice {
 		data = []any{data}
 	}
 
-	return normalizeJSON[JSONArray](data, opts...)
+	return normalizeJSON[jsonArray](data, opts...)
 }

@@ -2,7 +2,7 @@ package gotestify
 
 import (
 	"bytes"
-	gojson "encoding/json"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"io"
@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"uuid"
 )
@@ -23,35 +24,34 @@ type tHelper interface {
 
 // TestingT is the subset of *testing.T the assertion helpers need.
 type TestingT interface {
-	Fatalf(format string, args ...any)
 	Errorf(format string, args ...any)
 }
 
-// JSONEqual fails t unless expected and actual are the same JSON document.
-// Either argument may be a JSON string or any value marshalable with
-// encoding/json/v2 and jsonOpts. The expected side may use {{...}}
-// placeholders: see Compare.
-func JSONEqual(t TestingT, expected, actual any, jsonOpts ...json.Options) {
+// JSONEqual reports whether expected and actual are the same JSON document,
+// failing t with a colorized diff when they are not. Either argument may be a
+// JSON string or any value marshalable with encoding/json/v2 and jsonOpts. The
+// expected side may use {{...}} placeholders: see Compare.
+func JSONEqual(t TestingT, expected, actual any, jsonOpts ...json.Options) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
-	assertJSON(t, expected, actual, "FullMatch", func(d Difference) bool {
+	return assertJSON(t, expected, actual, "FullMatch", func(d Difference) bool {
 		return d == FullMatch
 	}, jsonOpts...)
 }
 
-// IsSubsetJSON is JSONEqual that also accepts extra properties on the actual
-// side.
-func IsSubsetJSON(t TestingT, expected, actual any, jsonOpts ...json.Options) {
+// JSONSubset is JSONEqual that also accepts extra properties on the actual
+// side, for asserting on part of a larger payload.
+func JSONSubset(t TestingT, expected, actual any, jsonOpts ...json.Options) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
-	assertJSON(t, expected, actual, "FullMatch | SubsetMatch", func(d Difference) bool {
+	return assertJSON(t, expected, actual, "FullMatch | SubsetMatch", func(d Difference) bool {
 		return d == FullMatch || d == SubsetMatch
 	}, jsonOpts...)
 }
 
-func assertJSON(t TestingT, expected, actual any, want string, accept func(Difference) bool, jsonOpts ...json.Options) {
+func assertJSON(t TestingT, expected, actual any, want string, accept func(Difference) bool, jsonOpts ...json.Options) bool {
 	if h, ok := t.(tHelper); ok {
 		h.Helper()
 	}
@@ -59,18 +59,20 @@ func assertJSON(t TestingT, expected, actual any, want string, accept func(Diffe
 	a, err := toJSON(expected, jsonOpts...)
 	if err != nil {
 		t.Errorf("failed to marshal expected argument: %s", err)
-		return
+		return false
 	}
 	b, err := toJSON(actual, jsonOpts...)
 	if err != nil {
 		t.Errorf("failed to marshal actual argument: %s", err)
-		return
+		return false
 	}
 
-	diff, res := Compare(a, b, DefaultConsoleOptions())
+	diff, res := Compare(a, b, ConsoleDiffOptions())
 	if !accept(diff) {
 		t.Errorf("expected %s, got %s \n%s", want, diff, res)
+		return false
 	}
+	return true
 }
 
 // Difference is the difference type.
@@ -91,6 +93,10 @@ const (
 	SecondArgIsInvalidJSON
 	// BothArgsAreInvalidJSON means both arguments are invalid JSON.
 	BothArgsAreInvalidJSON
+	// ExpressionError means a {{...}} expression in the first argument could
+	// not be rendered, for example because it references an unbound variable
+	// with invalid template syntax.
+	ExpressionError
 )
 
 // String returns the string representation of the difference type.
@@ -110,9 +116,16 @@ func (d Difference) String() string {
 		return "SecondArgIsInvalidJSON"
 	case BothArgsAreInvalidJSON:
 		return "BothArgsAreInvalidJSON"
+	case ExpressionError:
+		return "ExpressionError"
 	}
 	return "Invalid"
 }
+
+// Number is a JSON number kept as its literal text, so that 1 and 1.0 stay
+// distinguishable and large integers keep their precision. It is what
+// Compare passes to DiffOptions.CompareNumbers.
+type Number string
 
 // Tag wraps a span of diff output, e.g. with ANSI color codes.
 type Tag struct {
@@ -121,27 +134,27 @@ type Tag struct {
 }
 
 // Options controls how Compare renders a diff. It is unrelated to json.Options.
-type Options struct {
+type DiffOptions struct {
 	Normal                Tag
 	Added                 Tag
 	Removed               Tag
 	Changed               Tag
 	Skipped               Tag
-	SkippedArrayElement   func(n int) string
-	SkippedObjectProperty func(n int) string
+	skippedArrayElement   func(n int) string
+	skippedObjectProperty func(n int) string
 	Prefix                string
 	Indent                string
 	PrintTypes            bool
 	ChangedSeparator      string
 	// When provided, this function will be used to compare two numbers. By default numbers are compared using their
 	// literal representation byte by byte.
-	CompareNumbers func(a, b gojson.Number) bool
+	CompareNumbers func(a, b Number) bool
 	// When true, only differences will be printed. By default, it will print the full json.
 	SkipMatches bool
 }
 
-// SkippedArrayElement returns the skipped array element string.
-func SkippedArrayElement(n int) string {
+// skippedArrayElement returns the skipped array element string.
+func skippedArrayElement(n int) string {
 	if n == 1 {
 		return "...skipped 1 array element..."
 	}
@@ -149,8 +162,8 @@ func SkippedArrayElement(n int) string {
 	return "...skipped " + strconv.Itoa(n) + " array elements..."
 }
 
-// SkippedObjectProperty returns the skipped object property string.
-func SkippedObjectProperty(n int) string {
+// skippedObjectProperty returns the skipped object property string.
+func skippedObjectProperty(n int) string {
 	if n == 1 {
 		return "...skipped 1 object property..."
 	}
@@ -158,10 +171,10 @@ func SkippedObjectProperty(n int) string {
 	return "...skipped " + strconv.Itoa(n) + " object properties..."
 }
 
-// DefaultJSONOptions provides a set of options in JSON format that are fully parseable.
+// JSONDiffOptions provides a set of options in JSON format that are fully parseable.
 // It returns the default JSON options.
-func DefaultJSONOptions() *Options {
-	return &Options{
+func JSONDiffOptions() *DiffOptions {
+	return &DiffOptions{
 		Added:            Tag{Begin: "\"prop-added\":{", End: "}"},
 		Removed:          Tag{Begin: "\"prop-removed\":{", End: "}"},
 		Changed:          Tag{Begin: "{\"changed\":[", End: "]}"},
@@ -170,31 +183,32 @@ func DefaultJSONOptions() *Options {
 	}
 }
 
-// DefaultConsoleOptions provides a set of options that are well suited for console output. Options
+// ConsoleDiffOptions provides a set of options that are well suited for console output. Options
 // use ANSI foreground color escape sequences to highlight changes.
 // It returns the default console options.
-func DefaultConsoleOptions() *Options {
-	return &Options{
+func ConsoleDiffOptions() *DiffOptions {
+	return &DiffOptions{
 		Added:                 Tag{Begin: "\033[0;32m", End: "\033[0m"},
 		Removed:               Tag{Begin: "\033[0;31m", End: "\033[0m"},
 		Changed:               Tag{Begin: "\033[0;33m", End: "\033[0m"},
 		Skipped:               Tag{Begin: "\033[0;90m", End: "\033[0m"},
-		SkippedArrayElement:   SkippedArrayElement,
-		SkippedObjectProperty: SkippedObjectProperty,
+		skippedArrayElement:   skippedArrayElement,
+		skippedObjectProperty: skippedObjectProperty,
 		ChangedSeparator:      " => ",
 		Indent:                "  ",
 	}
 }
 
 type context struct {
-	opts    *Options
+	opts    *DiffOptions
 	level   int
 	lastTag *Tag
 	diff    Difference
 	vars    map[string]any
+	err     error // first expression that failed to render, if any
 }
 
-func (ctx *context) compareNumbers(a, b gojson.Number) bool {
+func (ctx *context) compareNumbers(a, b Number) bool {
 	if ctx.opts.CompareNumbers != nil {
 		return ctx.opts.CompareNumbers(a, b)
 	}
@@ -231,7 +245,7 @@ func (ctx *context) writeValue(buf *bytes.Buffer, v any, full bool) {
 	switch vv := v.(type) {
 	case bool:
 		buf.WriteString(strconv.FormatBool(vv))
-	case gojson.Number:
+	case Number:
 		buf.WriteString(string(vv))
 	case string:
 		buf.WriteString(strconv.Quote(vv))
@@ -302,7 +316,7 @@ func (ctx *context) writeType(buf *bytes.Buffer, v any) {
 	switch v.(type) {
 	case bool:
 		buf.WriteString("(boolean)")
-	case gojson.Number:
+	case Number:
 		buf.WriteString("(number)")
 	case string:
 		buf.WriteString("(string)")
@@ -452,7 +466,7 @@ func (it *dualMapIterator) key(buf *bytes.Buffer) {
 	writeKey(buf, it.keys[it.current])
 }
 
-func (ctx context) vkey(k string) string {
+func (ctx *context) vkey(k string) string {
 	kv := ctx.val(k)
 	if s, ok := kv.(string); ok {
 		return s
@@ -460,7 +474,7 @@ func (ctx context) vkey(k string) string {
 	return k
 }
 
-func (ctx context) makeDualMapIterator(ax, bx map[string]any) dualIterator {
+func (ctx *context) makeDualMapIterator(ax, bx map[string]any) dualIterator {
 	a := make(map[string]any)
 	b := make(map[string]any)
 
@@ -603,8 +617,12 @@ func (ctx *context) val(x any) any {
 	if isExpression(x) {
 		res, err := ctx.evalExpression(x)
 		if err != nil {
-			// TODO: improve error handling
-			panic(err)
+			// Keep the raw expression so it shows up in the diff, and report
+			// the first failure through the Difference instead of panicking.
+			if ctx.err == nil {
+				ctx.err = fmt.Errorf("expression %q: %w", asStr(x), err)
+			}
+			return x
 		}
 
 		return res
@@ -667,8 +685,8 @@ func (ctx *context) printDiff(ai, bi any) string {
 	case reflect.String:
 		// string can be a json.Number here too (because it's a string type)
 		switch aa := a.(type) {
-		case gojson.Number:
-			bb, ok := b.(gojson.Number)
+		case Number:
+			bb, ok := b.(Number)
 			if !ok || !ctx.compareNumbers(aa, bb) {
 				ctx.printMismatch(&buf, a, b)
 				ctx.result(NoMatch)
@@ -687,7 +705,7 @@ func (ctx *context) printDiff(ai, bi any) string {
 		return ctx.printCollectionDiff(&collectionConfig{
 			open:    "[",
 			close:   "]",
-			skipped: ctx.opts.SkippedArrayElement,
+			skipped: ctx.opts.skippedArrayElement,
 			value:   a,
 		}, makeDualSliceIterator(sa, sb))
 	case reflect.Map:
@@ -695,7 +713,7 @@ func (ctx *context) printDiff(ai, bi any) string {
 		return ctx.printCollectionDiff(&collectionConfig{
 			open:    "{",
 			close:   "}",
-			skipped: ctx.opts.SkippedObjectProperty,
+			skipped: ctx.opts.skippedObjectProperty,
 			value:   a,
 		}, ctx.makeDualMapIterator(ma, mb))
 	}
@@ -752,18 +770,18 @@ func (ctx *context) printDiff(ai, bi any) string {
 // Both documents are decoded with encoding/json (v1) so that numbers keep
 // their literal text; json.Options passed to JSONEqual and friends affect
 // only how the arguments are marshaled, not this comparison.
-func Compare(a, b []byte, opts *Options) (Difference, string) {
+func Compare(a, b []byte, opts *DiffOptions) (Difference, string) {
 	return CompareStreams(bytes.NewReader(a), bytes.NewReader(b), opts)
 }
 
 // CompareStr is Compare for string documents.
-func CompareStr(a, b string, opts *Options) (Difference, string) {
+func CompareStr(a, b string, opts *DiffOptions) (Difference, string) {
 	return CompareStreams(strings.NewReader(a), strings.NewReader(b), opts)
 }
 
 // CompareStreams compares two JSON documents streamed by the specified readers.
 // See the documentation for `Compare` for a description of the input options and return values.
-func CompareStreams(a, b io.Reader, opts *Options) (Difference, string) {
+func CompareStreams(a, b io.Reader, opts *DiffOptions) (Difference, string) {
 	av, bv, diff, err := decodePair(a, b)
 	if err != nil {
 		return diff, err.Error()
@@ -771,16 +789,20 @@ func CompareStreams(a, b io.Reader, opts *Options) (Difference, string) {
 
 	ctx := context{opts: opts}
 	ctx.collectVars(av, bv)
-	return ctx.diff, ctx.printDiff(av, bv)
+	res := ctx.printDiff(av, bv)
+	if ctx.err != nil {
+		return ExpressionError, ctx.err.Error() + "\n" + res
+	}
+	return ctx.diff, res
 }
 
 // CollectVars collects the variables from two JSON documents using given options.
-func CollectVars(a, b string, opts *Options) (map[string]any, error) {
+func CollectVars(a, b string, opts *DiffOptions) (map[string]any, error) {
 	return CollectVarsStream(strings.NewReader(a), strings.NewReader(b), opts)
 }
 
 // CollectVarsStream collects the variables from two JSON documents streamed by the specified readers using given options.
-func CollectVarsStream(a, b io.Reader, opts *Options) (map[string]any, error) {
+func CollectVarsStream(a, b io.Reader, opts *DiffOptions) (map[string]any, error) {
 	av, bv, _, err := decodePair(a, b)
 	if err != nil {
 		return nil, err
@@ -788,18 +810,17 @@ func CollectVarsStream(a, b io.Reader, opts *Options) (map[string]any, error) {
 
 	ctx := context{opts: opts}
 	ctx.collectVars(av, bv)
+	if ctx.err != nil {
+		return nil, ctx.err
+	}
 	return ctx.vars, nil
 }
 
-// decodePair decodes two JSON documents into generic values, keeping numbers
-// as their literal text. On failure it also reports which side was invalid.
+// decodePair decodes two JSON documents with decodeDocument. On failure it
+// also reports which side was invalid.
 func decodePair(a, b io.Reader) (av, bv any, diff Difference, err error) {
-	da := gojson.NewDecoder(a)
-	da.UseNumber()
-	db := gojson.NewDecoder(b)
-	db.UseNumber()
-	errA := da.Decode(&av)
-	errB := db.Decode(&bv)
+	av, errA := decodeDocument(a)
+	bv, errB := decodeDocument(b)
 	switch {
 	case errA != nil && errB != nil:
 		return nil, nil, BothArgsAreInvalidJSON, fmt.Errorf("invalid jsons:\na: %w\nb: %w", errA, errB)
@@ -809,6 +830,59 @@ func decodePair(a, b io.Reader) (av, bv any, diff Difference, err error) {
 		return nil, nil, SecondArgIsInvalidJSON, fmt.Errorf("invalid json:\nb: %w", errB)
 	}
 	return av, bv, FullMatch, nil
+}
+
+// decodeDocument decodes one JSON document into the generic shape the diff
+// engine walks: map[string]any, []any, string, bool, nil, and Number for
+// numbers, which keeps their literal text. Content after the first document
+// is ignored.
+func decodeDocument(r io.Reader) (any, error) {
+	return decodeValue(jsontext.NewDecoder(r))
+}
+
+func decodeValue(dec *jsontext.Decoder) (any, error) {
+	tok, err := dec.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+	switch tok.Kind() {
+	case 'n':
+		return nil, nil
+	case 't', 'f':
+		return tok.Bool(), nil
+	case '"':
+		return tok.String(), nil
+	case '0':
+		return Number(tok.String()), nil
+	case '[':
+		arr := []any{}
+		for dec.PeekKind() != ']' {
+			v, err := decodeValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			arr = append(arr, v)
+		}
+		_, err := dec.ReadToken()
+		return arr, err
+	case '{':
+		obj := map[string]any{}
+		for dec.PeekKind() != '}' {
+			k, err := dec.ReadToken()
+			if err != nil {
+				return nil, err
+			}
+			key := k.String() // a Token is voided by the next decoder call
+			v, err := decodeValue(dec)
+			if err != nil {
+				return nil, err
+			}
+			obj[key] = v
+		}
+		_, err := dec.ReadToken()
+		return obj, err
+	}
+	return nil, fmt.Errorf("unexpected token %v", tok)
 }
 
 func asStr(v any) string {
@@ -835,14 +909,37 @@ func isVar(v any) bool {
 	return ok
 }
 
-// Fn is a matcher: it reports whether an actual value satisfies a placeholder
-// such as {{uuid}}.
-type Fn func(x any) bool
+// Matcher reports whether an actual value satisfies a placeholder such as
+// {{uuid}}.
+type Matcher func(actual any) bool
 
-var functions = map[string]Fn{
-	"any":       anyFunc,
-	"timestamp": isTimestamp,
-	"uuid":      isUUID,
+var (
+	matchersMu sync.RWMutex
+	matchers   = map[string]Matcher{
+		"any":       anyMatcher,
+		"timestamp": isTimestamp,
+		"uuid":      isUUID,
+	}
+)
+
+// RegisterMatcher makes {{name}} usable as a placeholder on the expected side
+// of a comparison, matching any value for which fn returns true. Registering
+// a name again replaces the previous matcher. It panics if name is empty or
+// fn is nil.
+func RegisterMatcher(name string, fn Matcher) {
+	if name == "" || fn == nil {
+		panic("gotestify: RegisterMatcher called with an empty name or nil matcher")
+	}
+	matchersMu.Lock()
+	defer matchersMu.Unlock()
+	matchers[name] = fn
+}
+
+func lookupMatcher(name string) (Matcher, bool) {
+	matchersMu.RLock()
+	defer matchersMu.RUnlock()
+	fn, ok := matchers[name]
+	return fn, ok
 }
 
 // isFunc reports whether v is a placeholder naming a registered matcher.
@@ -851,7 +948,7 @@ func isFunc(v any) bool {
 	if !ok {
 		return false
 	}
-	_, ok = functions[name]
+	_, ok = lookupMatcher(name)
 	return ok
 }
 
@@ -867,7 +964,7 @@ func (ctx *context) evalExpression(v any) (string, error) {
 		return "", fmt.Errorf("not an expression: %v", v)
 	}
 
-	return CompileTemplate(strings.ReplaceAll(asStr(v), "{{", "{{."), ctx.vars)
+	return compileTemplate(strings.ReplaceAll(asStr(v), "{{", "{{."), ctx.vars)
 }
 
 // evalFunction applies the matcher named by placeholder a to b.
@@ -876,11 +973,11 @@ func evalFunction(a, b any) bool {
 	if !ok {
 		return false
 	}
-	fn, ok := functions[name]
+	fn, ok := lookupMatcher(name)
 	return ok && fn(b)
 }
 
-func anyFunc(_ any) bool {
+func anyMatcher(_ any) bool {
 	return true
 }
 

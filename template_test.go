@@ -10,7 +10,7 @@ import (
 )
 
 func TestCompileTemplate(t *testing.T) {
-	out, err := CompileTemplate("{{.Name}} is {{.Age}}", map[string]any{"Name": "Alice", "Age": 25})
+	out, err := compileTemplate("{{.Name}} is {{.Age}}", map[string]any{"Name": "Alice", "Age": 25})
 	require.NoError(t, err)
 	assert.Equal(t, "Alice is 25", out)
 }
@@ -22,7 +22,7 @@ func TestCompileTemplateJSON(t *testing.T) {
 	}
 
 	// Fields are addressed by their JSON names, not the Go ones.
-	out, err := CompileTemplateJSON("{{.name}} is {{.age}}", row{Name: "Alice", Age: 25})
+	out, err := compileTemplateJSON("{{.name}} is {{.age}}", row{Name: "Alice", Age: 25})
 	require.NoError(t, err)
 	assert.Equal(t, "Alice is 25", out)
 
@@ -31,7 +31,7 @@ func TestCompileTemplateJSON(t *testing.T) {
 			return enc.WriteToken(jsontext.String("<" + s + ">"))
 		}))
 
-	out, err = CompileTemplateJSON("{{.name}}", row{Name: "Alice"}, upper)
+	out, err = compileTemplateJSON("{{.name}}", row{Name: "Alice"}, upper)
 	require.NoError(t, err)
 	assert.Equal(t, "<Alice>", out)
 }
