@@ -1,0 +1,61 @@
+goquality report for iv-one/go-testify@6e75fa9f67e5f60daccd5dbb21cf844412f5ce07 (2026-09-27)
+
+Go Quality  github.com/iv-one/go-testify
+
+Grade ................................. A+
+Score .............................. 99.1%
+
+Project
+  go version ...................... 1.27.1
+  packages ............................. 1
+  go files ............................ 14
+  test files ........................... 7
+  lines of code .................... 1,013
+  lines of test code ................. 613
+  functions ........................... 73
+  dependencies ......................... 2
+  direct dependencies .................. 1
+
+Correctness
+  build ............................. PASS
+  go vet ............................ PASS
+  staticcheck ....................... PASS
+  errcheck .......................... PASS
+  ineffassign ....................... PASS
+
+Maintainability
+  gofmt ............................. 100%
+  complexity ......................... 97%
+    average complexity ............... 3.6
+    max complexity .................... 22
+    most complex .. gotestify.(*context).printCollectionDiff
+    functions > 15 ..................... 2
+      jsoneq.go:535:1 cyclomatic complexity 22 of gotestify.(*context).printCollectionDiff is high (> 15)
+      jsoneq.go:633:1 cyclomatic complexity 21 of gotestify.(*context).printDiff is high (> 15)
+  misspell .......................... PASS
+  nolint ............................ PASS
+  license ........................ LICENSE
+
+Tests
+  tests ............................... 23
+    packages tested .................. 1/1
+    test files ......................... 7
+    examples ........................... 8
+  coverage ......................... 91.7%
+    tests passed ...................... 31
+    tests failed ....................... 0
+
+Security
+  vulnerabilities ...................... 0
+    affected modules ................... 0
+    imported, not called ............... 0
+    required, not imported ............. 0
+  security findings .................... 0
+    high ............................... 0
+    medium ............................. 0
+    low ................................ 0
+
+Overall
+  issues ............................... 2
+  time .............................. 3.2s
+  goquality version .............. (devel)

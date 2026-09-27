@@ -1,0 +1,317 @@
+{
+  "schema": 1,
+  "goquality_version": "(devel)",
+  "commit": "6e75fa9f67e5f60daccd5dbb21cf844412f5ce07",
+  "timestamp": "2026-09-27T13:16:48Z",
+  "settings": {
+    "patterns": [
+      "./..."
+    ],
+    "checks": [
+      "build",
+      "govet",
+      "staticcheck",
+      "errcheck",
+      "ineffassign",
+      "gofmt",
+      "complexity",
+      "misspell",
+      "nolint",
+      "license",
+      "tests",
+      "coverage",
+      "govulncheck",
+      "gosec"
+    ],
+    "cover": true,
+    "cyclo_over": 15
+  },
+  "report": {
+    "goquality_version": "(devel)",
+    "project": {
+      "module": "github.com/iv-one/go-testify",
+      "go_version": "1.27.1",
+      "packages": 1,
+      "tested_packages": 1,
+      "go_files": 14,
+      "test_files": 7,
+      "generated_files": 0,
+      "lines": 2085,
+      "code_lines": 1013,
+      "test_code_lines": 613,
+      "functions": 73,
+      "tests": 23,
+      "benchmarks": 0,
+      "fuzz_tests": 0,
+      "examples": 8,
+      "direct_dependencies": 1,
+      "indirect_dependencies": 1,
+      "build_dependencies": 2
+    },
+    "grade": "A+",
+    "score": 99.11775885474515,
+    "issues": 2,
+    "suppressed": 0,
+    "checks": [
+      {
+        "name": "build",
+        "label": "build",
+        "category": "correctness",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.1,
+        "score": 1,
+        "duration_seconds": 0.000001633
+      },
+      {
+        "name": "govet",
+        "label": "go vet",
+        "category": "correctness",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.2,
+        "score": 1,
+        "duration_seconds": 2.692048366
+      },
+      {
+        "name": "staticcheck",
+        "label": "staticcheck",
+        "category": "correctness",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.15,
+        "score": 1,
+        "duration_seconds": 2.6996545100000002
+      },
+      {
+        "name": "errcheck",
+        "label": "errcheck",
+        "category": "correctness",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.1,
+        "score": 1,
+        "duration_seconds": 2.6993024180000003
+      },
+      {
+        "name": "ineffassign",
+        "label": "ineffassign",
+        "category": "correctness",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.05,
+        "score": 1,
+        "duration_seconds": 2.699303601
+      },
+      {
+        "name": "gofmt",
+        "label": "gofmt",
+        "category": "maintainability",
+        "status": "pass",
+        "summary": "100%",
+        "weight": 0.15,
+        "score": 1,
+        "duration_seconds": 0.008825317
+      },
+      {
+        "name": "complexity",
+        "label": "complexity",
+        "category": "maintainability",
+        "status": "warn",
+        "summary": "97%",
+        "weight": 0.1,
+        "score": 0.9726027397260274,
+        "metrics": [
+          {
+            "key": "average",
+            "label": "average complexity",
+            "value": 3.6
+          },
+          {
+            "key": "max",
+            "label": "max complexity",
+            "value": 22
+          },
+          {
+            "key": "max_function",
+            "label": "most complex",
+            "value": "gotestify.(*context).printCollectionDiff"
+          },
+          {
+            "key": "over_threshold",
+            "label": "functions \u003e 15",
+            "value": 2
+          }
+        ],
+        "findings": [
+          {
+            "file": "jsoneq.go",
+            "line": 535,
+            "column": 1,
+            "message": "cyclomatic complexity 22 of gotestify.(*context).printCollectionDiff is high (\u003e 15)",
+            "line_hash": "036fa55cccb897dd"
+          },
+          {
+            "file": "jsoneq.go",
+            "line": 633,
+            "column": 1,
+            "message": "cyclomatic complexity 21 of gotestify.(*context).printDiff is high (\u003e 15)",
+            "line_hash": "63ab86cb2c23ca9f"
+          }
+        ],
+        "duration_seconds": 0.000385863
+      },
+      {
+        "name": "misspell",
+        "label": "misspell",
+        "category": "maintainability",
+        "status": "pass",
+        "summary": "PASS",
+        "weight": 0.02,
+        "score": 1,
+        "duration_seconds": 0.014863976
+      },
+      {
+        "name": "nolint",
+        "label": "nolint",
+        "category": "maintainability",
+        "status": "info",
+        "summary": "PASS",
+        "weight": 0,
+        "duration_seconds": 0.000246392
+      },
+      {
+        "name": "license",
+        "label": "license",
+        "category": "maintainability",
+        "status": "pass",
+        "summary": "LICENSE",
+        "weight": 0.03,
+        "score": 1,
+        "duration_seconds": 0.000056075
+      },
+      {
+        "name": "tests",
+        "label": "tests",
+        "category": "tests",
+        "status": "pass",
+        "summary": "23",
+        "weight": 0.05,
+        "score": 1,
+        "metrics": [
+          {
+            "key": "packages_tested",
+            "label": "packages tested",
+            "value": "1/1"
+          },
+          {
+            "key": "test_files",
+            "label": "test files",
+            "value": 7
+          },
+          {
+            "key": "examples",
+            "label": "examples",
+            "value": 8
+          }
+        ],
+        "duration_seconds": 0.002421214
+      },
+      {
+        "name": "coverage",
+        "label": "coverage",
+        "category": "tests",
+        "status": "pass",
+        "summary": "91.7%",
+        "weight": 0.1,
+        "score": 0.9171171171171171,
+        "metrics": [
+          {
+            "key": "tests_passed",
+            "label": "tests passed",
+            "value": 31
+          },
+          {
+            "key": "tests_failed",
+            "label": "tests failed",
+            "value": 0
+          }
+        ],
+        "duration_seconds": 2.20825304
+      },
+      {
+        "name": "govulncheck",
+        "label": "vulnerabilities",
+        "category": "security",
+        "status": "pass",
+        "summary": "0",
+        "weight": 0.1,
+        "score": 1,
+        "metrics": [
+          {
+            "key": "affected_modules",
+            "label": "affected modules",
+            "value": 0
+          },
+          {
+            "key": "imported_not_called",
+            "label": "imported, not called",
+            "value": 0
+          },
+          {
+            "key": "required_not_imported",
+            "label": "required, not imported",
+            "value": 0
+          }
+        ],
+        "duration_seconds": 3.222240856
+      },
+      {
+        "name": "gosec",
+        "label": "security findings",
+        "category": "security",
+        "status": "pass",
+        "summary": "0",
+        "weight": 0.1,
+        "score": 1,
+        "metrics": [
+          {
+            "key": "high",
+            "label": "high",
+            "value": 0
+          },
+          {
+            "key": "medium",
+            "label": "medium",
+            "value": 0
+          },
+          {
+            "key": "low",
+            "label": "low",
+            "value": 0
+          }
+        ],
+        "duration_seconds": 1.015512744
+      }
+    ],
+    "next_steps": [
+      {
+        "check": "coverage",
+        "label": "coverage",
+        "gain": 0.6630630630630634,
+        "issues": 0,
+        "files": 0,
+        "hint": "Add tests for uncovered code; go test -coverprofile=c.out ./... \u0026\u0026 go tool cover -func=c.out shows the gaps."
+      },
+      {
+        "check": "complexity",
+        "label": "complexity",
+        "gain": 0.2191780821917746,
+        "issues": 2,
+        "files": 1,
+        "hint": "Split the listed functions: extract branches and loops into well-named helpers."
+      }
+    ],
+    "duration_seconds": 3.233134607
+  }
+}
