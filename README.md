@@ -1,5 +1,8 @@
 # go-testify
 
+[![Go Quality score](https://raw.githubusercontent.com/iv-one/go-testify/quality-history/badges/score.svg)](https://github.com/iv-one/go-testify/blob/quality-history/report.txt)
+[![Go Quality grade](https://raw.githubusercontent.com/iv-one/go-testify/quality-history/badges/grade.svg)](https://github.com/iv-one/go-testify/blob/quality-history/report.txt)
+
 An extension of [`stretchr/testify`](https://github.com/stretchr/testify) for asserting on
 JSON documents - and, to a lesser extent, tables.
 
