@@ -1,4 +1,4 @@
-goquality report for iv-one/go-testify@f7ee8dbc63c1f32255ac14294a7f09e0c375dd95 (2026-11-21)
+goquality report for iv-one/go-testify@0c22481976c7e0d1af3c62168bea05c7fcfca9c8 (2026-11-21)
 
 Go Quality  github.com/iv-one/go-testify
 
@@ -6,7 +6,7 @@ Grade ................................. A+
 Score .............................. 99.1%
 
 Project
-  go version ...................... 1.27.1
+  go version ...................... 1.27.4
   packages ............................. 1
   go files ............................ 14
   test files ........................... 7
@@ -57,5 +57,5 @@ Security
 
 Overall
   issues ............................... 2
-  time .............................. 3.3s
+  time .............................. 3.1s
   goquality version .............. (devel)

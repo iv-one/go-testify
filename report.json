@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "goquality_version": "(devel)",
-  "commit": "f7ee8dbc63c1f32255ac14294a7f09e0c375dd95",
-  "timestamp": "2026-11-21T16:10:48Z",
+  "commit": "0c22481976c7e0d1af3c62168bea05c7fcfca9c8",
+  "timestamp": "2026-11-21T18:03:42Z",
   "settings": {
     "patterns": [
       "./..."
@@ -30,7 +30,7 @@
     "goquality_version": "(devel)",
     "project": {
       "module": "github.com/iv-one/go-testify",
-      "go_version": "1.27.1",
+      "go_version": "1.27.4",
       "packages": 1,
       "tested_packages": 1,
       "go_files": 14,
@@ -61,7 +61,7 @@
         "summary": "PASS",
         "weight": 0.1,
         "score": 1,
-        "duration_seconds": 0.000001512
+        "duration_seconds": 0.000005648
       },
       {
         "name": "govet",
@@ -71,7 +71,7 @@
         "summary": "PASS",
         "weight": 0.2,
         "score": 1,
-        "duration_seconds": 2.404108991
+        "duration_seconds": 2.5780953
       },
       {
         "name": "staticcheck",
@@ -81,7 +81,7 @@
         "summary": "PASS",
         "weight": 0.15,
         "score": 1,
-        "duration_seconds": 2.407369754
+        "duration_seconds": 2.5714856790000002
       },
       {
         "name": "errcheck",
@@ -91,7 +91,7 @@
         "summary": "PASS",
         "weight": 0.1,
         "score": 1,
-        "duration_seconds": 2.407385888
+        "duration_seconds": 2.558055373
       },
       {
         "name": "ineffassign",
@@ -101,7 +101,7 @@
         "summary": "PASS",
         "weight": 0.05,
         "score": 1,
-        "duration_seconds": 2.407385367
+        "duration_seconds": 2.5827660999999997
       },
       {
         "name": "gofmt",
@@ -111,7 +111,7 @@
         "summary": "100%",
         "weight": 0.15,
         "score": 1,
-        "duration_seconds": 0.004476604
+        "duration_seconds": 0.007858468
       },
       {
         "name": "complexity",
@@ -159,7 +159,7 @@
             "line_hash": "63ab86cb2c23ca9f"
           }
         ],
-        "duration_seconds": 0.000270985
+        "duration_seconds": 0.003699488
       },
       {
         "name": "misspell",
@@ -169,7 +169,7 @@
         "summary": "PASS",
         "weight": 0.02,
         "score": 1,
-        "duration_seconds": 0.181422727
+        "duration_seconds": 0.262378223
       },
       {
         "name": "nolint",
@@ -178,7 +178,7 @@
         "status": "info",
         "summary": "PASS",
         "weight": 0,
-        "duration_seconds": 0.170257094
+        "duration_seconds": 0.000209208
       },
       {
         "name": "license",
@@ -188,7 +188,7 @@
         "summary": "LICENSE",
         "weight": 0.03,
         "score": 1,
-        "duration_seconds": 0.170243028
+        "duration_seconds": 0.000063744
       },
       {
         "name": "tests",
@@ -215,7 +215,7 @@
             "value": 8
           }
         ],
-        "duration_seconds": 0.001540637
+        "duration_seconds": 0.0024721
       },
       {
         "name": "coverage",
@@ -237,7 +237,7 @@
             "value": 0
           }
         ],
-        "duration_seconds": 2.965503553
+        "duration_seconds": 1.779445542
       },
       {
         "name": "govulncheck",
@@ -264,7 +264,7 @@
             "value": 0
           }
         ],
-        "duration_seconds": 3.263681308
+        "duration_seconds": 3.071896832
       },
       {
         "name": "gosec",
@@ -291,7 +291,7 @@
             "value": 0
           }
         ],
-        "duration_seconds": 0.382775339
+        "duration_seconds": 0.32319735
       }
     ],
     "next_steps": [
@@ -312,6 +312,6 @@
         "hint": "Split the listed functions: extract branches and loops into well-named helpers."
       }
     ],
-    "duration_seconds": 3.2782879449999998
+    "duration_seconds": 3.09252717
   }
 }
