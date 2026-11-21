@@ -1,4 +1,4 @@
-goquality report for iv-one/go-testify@6e75fa9f67e5f60daccd5dbb21cf844412f5ce07 (2026-09-27)
+goquality report for iv-one/go-testify@f7ee8dbc63c1f32255ac14294a7f09e0c375dd95 (2026-11-21)
 
 Go Quality  github.com/iv-one/go-testify
 
@@ -41,7 +41,7 @@ Tests
     packages tested .................. 1/1
     test files ......................... 7
     examples ........................... 8
-  coverage ......................... 91.7%
+  coverage ......................... 91.2%
     tests passed ...................... 31
     tests failed ....................... 0
 
@@ -57,5 +57,5 @@ Security
 
 Overall
   issues ............................... 2
-  time .............................. 3.2s
+  time .............................. 3.3s
   goquality version .............. (devel)
