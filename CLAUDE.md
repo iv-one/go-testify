@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 `github.com/iv-one/go-testify` is a single root package, `gotestify`, extending
 stretchr/testify with assertions on **JSON** documents and **tabular** output. It targets Go
-1.27 and uses the stdlib `encoding/json/v2`, `encoding/json/jsontext` and `uuid` packages (all
-build without `GOEXPERIMENT` on the go1.27.1 toolchain here). The import path and the package
+1.27.4 and uses the stdlib `encoding/json/v2`, `encoding/json/jsontext` and `uuid` packages (all
+build without `GOEXPERIMENT` on the go1.27.4 toolchain here). The import path and the package
 name differ on purpose (`go-testify` / `gotestify`), the same convention as
 `hashicorp/go-multierror` -> `multierror`. testify is the only module dependency and is used
 only by the tests.
