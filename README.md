@@ -14,7 +14,7 @@ go get github.com/iv-one/go-testify
 import "github.com/iv-one/go-testify" // package gotestify
 ```
 
-Requires Go 1.27 (uses the stdlib `encoding/json/v2` and `uuid` packages). The only
+Requires Go 1.27.4 (uses the stdlib `encoding/json/v2` and `uuid` packages). The only
 dependency is testify itself, and only for the test suite.
 
 The helpers accept the same `TestingT` that testify's `assert` package does, take arguments in
